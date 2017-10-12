@@ -316,6 +316,40 @@ func resourceDockerContainerUpdate(d *schema.ResourceData, meta interface{}) err
 func resourceDockerContainerDelete(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*dc.Client)
 
+	if v, ok := d.GetOk("destroy_command"); ok {
+	command := []string{}
+	command = stringListToStringSlice(v.([]interface{}))
+	// Create Opts for exec command to execute
+	createOpts := dc.CreateExecOptions{
+		AttachStdout: true,
+		AttachStderr: true,
+		Tty:          true,
+		Cmd:          command,
+		Container:    d.Id(),
+	}
+	// GOOD
+	var retExec *dc.Exec
+	var err error
+	var stdout, stderr bytes.Buffer
+	if retExec, err = client.CreateExec(createOpts); err != nil {
+		return fmt.Errorf("Unable to create exec: %s", err)
+	}
+
+	execId := retExec.ID
+	opts := dc.StartExecOptions{
+		OutputStream: &stdout,
+		ErrorStream:  &stderr,
+		RawTerminal:  true,
+		Tty:          true,
+	}
+
+	if err = client.StartExec(execId, opts); err != nil {
+		fmt.Errorf("StartExec Error: %s", err.Error())
+		// HOW DO WE OUTPUT &stdout
+		return fmt.Errorf("Unable to start exec: %s", err)
+	}
+}
+
 	// Stop the container before removing if destroy_grace_seconds is defined
 	if d.Get("destroy_grace_seconds").(int) > 0 {
 		var timeout = uint(d.Get("destroy_grace_seconds").(int))
